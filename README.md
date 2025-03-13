@@ -4,12 +4,18 @@
   <a href="https://docs.muijf.com/path-matcher">Docs</a>
 </p>
 
+# Installation
+
+```bash
+npm install @path-matcher/core
+```
+
 # Usage
 
-# Filter
+## Filter
 
 ```ts
-import { filter } from "path-matcher";
+import { filter } from "@path-matcher/core";
 
 const obj = {
   hello: {
