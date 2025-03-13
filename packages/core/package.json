@@ -1,0 +1,48 @@
+{
+  "name": "@path-matcher/core",
+  "version": "0.0.0",
+  "description": "A package for matching paths",
+  "keywords": [
+    "path",
+    "matcher"
+  ],
+  "homepage": "https://github.com/muijf/path-matcher",
+  "bugs": {
+    "url": "https://github.com/muijf/path-matcher/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/muijf/path-matcher.git",
+    "directory": "packages/core"
+  },
+  "license": "MIT",
+  "author": "Muijf <contact@muijf.com>",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup"
+  },
+  "devDependencies": {
+    "tsup": "^8.4.0"
+  },
+  "packageManager": "pnpm@8.6.7",
+  "publishConfig": {
+    "access": "public"
+  }
+}
