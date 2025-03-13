@@ -1,13 +1,13 @@
-<img src="https://github.com/muijf/path-matcher/blob/main/.github/banner.png?raw=true">
+<img src="https://github.com/muijf/pathkit/blob/main/.github/banner.png?raw=true">
 
 <p align="center">
-  <a href="https://docs.muijf.com/path-matcher">Docs</a>
+  <a href="https://docs.muijf.com/pathkit">Docs</a>
 </p>
 
 # Installation
 
 ```bash
-npm install @path-matcher/core
+npm install @pathkit/object
 ```
 
 # Usage
@@ -15,7 +15,7 @@ npm install @path-matcher/core
 ## Filter
 
 ```ts
-import { filter } from "@path-matcher/core";
+import { filter } from "@pathkit/object";
 
 const obj = {
   hello: {

@@ -1,7 +1,7 @@
 {
-  "name": "@path-matcher/core",
+  "name": "@pathkit/object",
   "version": "0.0.0",
-  "description": "A package for matching paths",
+  "description": "A package for filtering objects",
   "keywords": [
     "path",
     "matcher"
