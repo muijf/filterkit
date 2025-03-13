@@ -17,7 +17,6 @@ type ObjectPaths<T> = PathsWithDepthLimit<T> | (keyof T & string);
 
 type KeysOf<T> = keyof T & (string | number);
 
-// Helper to check if a path segment exists at any depth
 type ExistsAtAnyDepth<T, K extends string> = K extends keyof T
   ? true
   : T extends object
@@ -93,24 +92,22 @@ type WildcardPath<P extends string, T> =
   | SingleWildcardPath<P, T>
   | DoubleWildcardPath<P, T>;
 
-type BracketNotation<T> =
-  | `[${KeysOf<T>}]`
-  | {
-      [K1 in KeysOf<T>]: {
-        [K2 in Exclude<KeysOf<T>, K1>]:
-          | `[${K1}|${K2}]`
-          | {
-              [K3 in Exclude<KeysOf<T>, K1 | K2>]:
-                | `[${K1}|${K2}|${K3}]`
-                | {
-                    [K4 in Exclude<
-                      KeysOf<T>,
-                      K1 | K2 | K3
-                    >]: `[${K1}|${K2}|${K3}|${K4}]`;
-                  }[Exclude<KeysOf<T>, K1 | K2 | K3>];
-            }[Exclude<KeysOf<T>, K1 | K2>];
-      }[Exclude<KeysOf<T>, K1>];
-    }[KeysOf<T>];
+type BracketNotation<T> = {
+  [K1 in KeysOf<T>]: {
+    [K2 in Exclude<KeysOf<T>, K1>]:
+      | `[${K1}|${K2}]`
+      | {
+          [K3 in Exclude<KeysOf<T>, K1 | K2>]:
+            | `[${K1}|${K2}|${K3}]`
+            | {
+                [K4 in Exclude<
+                  KeysOf<T>,
+                  K1 | K2 | K3
+                >]: `[${K1}|${K2}|${K3}|${K4}]`;
+              }[Exclude<KeysOf<T>, K1 | K2 | K3>];
+        }[Exclude<KeysOf<T>, K1 | K2>];
+  }[Exclude<KeysOf<T>, K1>];
+}[KeysOf<T>];
 
 type GetCommonKeys<T, K1 extends KeysOf<T>, K2 extends KeysOf<T>> = Extract<
   keyof T[K1],
@@ -118,19 +115,13 @@ type GetCommonKeys<T, K1 extends KeysOf<T>, K2 extends KeysOf<T>> = Extract<
 > &
   (string | number);
 
-type NestedBracketNotation<T> =
-  | {
-      [K1 in KeysOf<T>]: `[${K1}].${ObjectPaths<T[K1]> & string}`;
-    }[KeysOf<T>]
-  | {
-      [K1 in KeysOf<T>]: {
-        [K2 in Exclude<KeysOf<T>, K1>]: {
-          [CK in GetCommonKeys<T, K1, K2>]:
-            | `[${K1}|${K2}].${CK}`
-            | `[${K1}|${K2}].${CK}.${string}`;
-        }[GetCommonKeys<T, K1, K2>];
-      }[Exclude<KeysOf<T>, K1>];
-    }[KeysOf<T>];
+type NestedBracketNotation<T> = {
+  [K1 in KeysOf<T>]: {
+    [K2 in Exclude<KeysOf<T>, K1>]: {
+      [CK in GetCommonKeys<T, K1, K2>]: `[${K1}|${K2}].${CK}`;
+    }[GetCommonKeys<T, K1, K2>];
+  }[Exclude<KeysOf<T>, K1>];
+}[KeysOf<T>];
 
 export type PathPatterns<T> =
   | ObjectPaths<T>
