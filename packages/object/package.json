@@ -1,19 +1,19 @@
 {
-  "name": "@pathkit/object",
+  "name": "@filterkit/object",
   "version": "0.0.0",
   "description": "A package for filtering objects",
   "keywords": [
-    "path",
-    "matcher"
+    "filter",
+    "object"
   ],
-  "homepage": "https://github.com/muijf/path-matcher",
+  "homepage": "https://github.com/muijf/filterkit",
   "bugs": {
-    "url": "https://github.com/muijf/path-matcher/issues"
+    "url": "https://github.com/muijf/filterkit/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/muijf/path-matcher.git",
-    "directory": "packages/core"
+    "url": "git+https://github.com/muijf/filterkit.git",
+    "directory": "packages/object"
   },
   "license": "MIT",
   "author": "Muijf <contact@muijf.com>",

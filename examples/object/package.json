@@ -1,0 +1,11 @@
+{
+  "name": "@filterkit/object-example",
+  "private": true,
+  "scripts": {
+    "run": "bun src/index.ts"
+  },
+  "dependencies": {
+    "@filterkit/object": "workspace:*"
+  },
+  "packageManager": "pnpm@8.6.7"
+}

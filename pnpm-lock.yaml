@@ -33,7 +33,13 @@ importers:
         specifier: ^3.0.8
         version: 3.0.8(@types/node@22.13.10)
 
-  packages/core:
+  examples/object:
+    dependencies:
+      '@filterkit/object':
+        specifier: workspace:*
+        version: link:../../packages/object
+
+  packages/object:
     devDependencies:
       tsup:
         specifier: ^8.4.0

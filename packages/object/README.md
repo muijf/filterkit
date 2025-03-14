@@ -1,7 +1,7 @@
 # Installation
 
 ```bash
-npm install @pathkit/object
+npm install @filterkit/object
 ```
 
 # Usage
@@ -9,7 +9,7 @@ npm install @pathkit/object
 ## Filter
 
 ```ts
-import { filter } from "@pathkit/object";
+import { filter } from "@filterkit/object";
 
 const obj = {
   hello: {
@@ -25,13 +25,27 @@ const obj = {
   },
 };
 
-filter(obj, "*"); // { hello: {}, world: {} }
-filter(obj, "**"); // { hello: { world: { text: "Hello World" } }, world: { hello: { text: "Hello World" } } }
-filter(obj, "hello.world"); // { hello: { world: { text: "Hello World" } } }
-filter(obj, "hello.*"); // { hello: { world: {} }
-filter(obj, "hello.**"); // { hello: { world: { text: "Hello World" }, test: "test" } }
-filter(obj, "[hello|world].*"); // { hello: { world: {} }, world: { hello: {} } }
-filter(obj, "[hello|world].**"); // { hello: { world: { text: "Hello World" } }, world: { hello: { text: "Hello World" } } }
-filter(obj, "hello.*.text"); // { hello: { world: { text: "Hello World" } } }
-filter(obj, "hello.**.text"); // { hello: { world: { text: "Hello World" } } }
+filter(obj, "hello.world", {
+  separator: ".",
+  wildcard: "*",
+  shallow: false,
+});
+
+// { hello: { world: { text: "Hello World" } } }
+
+filter(obj, "hello.world", {
+  separator: ".",
+  wildcard: "*",
+  shallow: true,
+});
+
+// { hello: { world: {} } }
+
+filter(obj, ["hello", ["world", { shallow: false }]], {
+  separator: ".",
+  wildcard: "*",
+  shallow: true,
+});
+
+// { hello: { }, world: { hello: { text: "Hello World" } } }
 ```

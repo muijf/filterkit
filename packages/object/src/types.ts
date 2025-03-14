@@ -1,130 +1,247 @@
-type Tail<T extends any[]> = T extends [any, ...infer R] ? R : never;
+/**
+ * Type to determine if a value is an object (excluding arrays and null)
+ */
+type IsObject<T> = T extends object ? (T extends any[] ? false : true) : false;
 
-type PathsWithDepthLimit<
+/**
+ * Default options for path operations
+ */
+export type DefaultOptions = {
+  separator: ".";
+  wildcard: "*";
+  shallow: false;
+};
+
+/**
+ * Options for the path functions with defaults
+ */
+export type Options<
+  Sep extends string = DefaultOptions["separator"],
+  Wild extends string = DefaultOptions["wildcard"],
+  Shallow extends boolean = DefaultOptions["shallow"],
+> = {
+  /**
+   * The separator character
+   * @default "."
+   */
+  separator?: Sep;
+  /**
+   * The wildcard character
+   * @default "*"
+   */
+  wildcard?: Wild;
+  /**
+   * Whether to shallowly filter the object
+   * @default false
+   */
+  shallow?: Shallow;
+};
+
+/**
+ * Get all possible paths in an object using dot notation
+ * @template T - The object type
+ * @template Sep - The separator character (default ".")
+ * @template Wild - The wildcard character (default "*")
+ */
+export type Filter<
   T,
-  Depth extends number[] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-> = [Depth] extends [[]]
-  ? never
-  : T extends object
-    ? {
-        [K in keyof T]: K extends string | number
-          ? K | `${K}.${PathsWithDepthLimit<T[K], Tail<Depth>>}`
-          : never;
-      }[keyof T & (string | number)]
-    : never;
+  Sep extends string = DefaultOptions["separator"],
+  Wild extends string = DefaultOptions["wildcard"],
+  Shallow extends boolean = DefaultOptions["shallow"],
+> = Wild | ObjectPaths<T, Sep, Wild, Shallow>;
 
-type ObjectPaths<T> = PathsWithDepthLimit<T> | (keyof T & string);
-
-type KeysOf<T> = keyof T & (string | number);
-
-type ExistsAtAnyDepth<T, K extends string> = K extends keyof T
-  ? true
-  : T extends object
-    ? { [P in keyof T]: ExistsAtAnyDepth<T[P], K> }[keyof T] extends never
-      ? false
-      : true
-    : false;
-
-// Helper to check if a segment is directly accessible from a path
-type IsDirectlyAccessible<
+/**
+ * Path with options
+ */
+export type PathWithOptions<
   T,
-  Path extends string,
-  Segment extends string,
-> = Path extends `${infer Start}.${infer Rest}`
-  ? Start extends keyof T
-    ? Rest extends `${infer Next}.${infer Remaining}`
-      ? Next extends keyof T[Start]
-        ? IsDirectlyAccessible<T[Start], Rest, Segment>
-        : false
-      : Rest extends keyof T[Start]
-        ? Segment extends keyof T[Start][Rest]
-          ? true
-          : false
-        : false
-    : false
-  : Path extends keyof T
-    ? Segment extends keyof T[Path]
-      ? true
-      : false
-    : false;
+  Sep extends string = DefaultOptions["separator"],
+  Wild extends string = DefaultOptions["wildcard"],
+  Shallow extends boolean = DefaultOptions["shallow"],
+  CustomSep extends string = string,
+> = readonly [
+  // If a custom separator is provided, use it for the path
+  CustomSep extends string
+    ? Wild | ObjectPaths<T, CustomSep, Wild, Shallow>
+    : Filter<T, Sep, Wild, Shallow>,
+  {
+    separator?: CustomSep;
+    wildcard?: Wild;
+    shallow?: boolean; // Allow any boolean value, not just Shallow
+  },
+];
 
-type SingleWildcardPath<P extends string, T> =
-  | "*"
-  | (P extends `${infer A}.${infer B}`
-      ? A extends keyof T
-        ? T[A] extends object
-          ? P extends `${infer Prefix}.*.${infer Suffix}`
-            ? IsDirectlyAccessible<T, Prefix, Suffix> extends true
-              ? Suffix extends keyof T[Prefix & keyof T]
-                ? T[Prefix & keyof T][Suffix] extends object
-                  ? `${A}.*.${B}` | `${A}.${SingleWildcardPath<B, T[A]>}`
-                  : never
-                : `${A}.*.${B}` | `${A}.${SingleWildcardPath<B, T[A]>}`
-              : `${A}.*.${B}` | `${A}.${SingleWildcardPath<B, T[A]>}`
-            : `${A}.*.${B}` | `${A}.${SingleWildcardPath<B, T[A]>}`
+/**
+ * Path parameter type - can be a single path, an array of paths, or an array of paths with options
+ */
+export type PathParam<
+  T,
+  Sep extends string = DefaultOptions["separator"],
+  Wild extends string = DefaultOptions["wildcard"],
+  Shallow extends boolean = DefaultOptions["shallow"],
+> =
+  | Filter<T, Sep, Wild, Shallow>
+  | readonly (
+      | Filter<T, Sep, Wild, Shallow>
+      | PathWithOptions<T, Sep, Wild, Shallow, string>
+    )[];
+
+/**
+ * Helper type to get all paths in an object without including the wildcard
+ */
+type ObjectPaths<
+  T,
+  Sep extends string = DefaultOptions["separator"],
+  Wild extends string = DefaultOptions["wildcard"],
+  Shallow extends boolean = DefaultOptions["shallow"],
+> = T extends object
+  ? {
+      [K in keyof T]: K extends string | number
+        ?
+            | `${K}`
+            | (IsObject<T[K]> extends true
+                ? `${K}${Sep}${ObjectPaths<T[K], Sep, Wild, Shallow>}`
+                : never)
+        : never;
+    }[keyof T]
+  : never;
+
+/**
+ * Get the type of a value at a specific path
+ * @template T - The object type
+ * @template P - The path string
+ * @template Sep - The separator character (default ".")
+ * @template Wild - The wildcard character (default "*")
+ */
+export type InferValue<
+  T,
+  P extends string,
+  Sep extends string = DefaultOptions["separator"],
+  Wild extends string = DefaultOptions["wildcard"],
+  Shallow extends boolean = DefaultOptions["shallow"],
+> = P extends Wild
+  ? T
+  : P extends `${infer K}${Sep}${infer Rest}`
+    ? K extends keyof T
+      ? InferValue<T[K], Rest, Sep, Wild, Shallow>
+      : K extends `${number}`
+        ? K extends `${infer N extends number}`
+          ? N extends keyof T
+            ? InferValue<T[N], Rest, Sep, Wild, Shallow>
+            : never
           : never
-        : ExistsAtAnyDepth<T, A> extends true
-          ? `*.${B}`
+        : never
+    : P extends keyof T
+      ? T[P]
+      : P extends `${number}`
+        ? P extends `${infer N extends number}`
+          ? N extends keyof T
+            ? T[N]
+            : never
           : never
-      : never);
+        : never;
 
-type DoubleWildcardPath<P extends string, T> =
-  | "**"
-  | (P extends `${infer A}.${infer B}`
-      ? A extends keyof T
-        ? T[A] extends object
-          ? P extends `${infer Prefix}.**.${infer Suffix}`
-            ? IsDirectlyAccessible<T, Prefix, Suffix> extends true
-              ? Suffix extends keyof T[Prefix & keyof T]
-                ? T[Prefix & keyof T][Suffix] extends object
-                  ? `${A}.**.${B}` | `${A}.${DoubleWildcardPath<B, T[A]>}`
-                  : never
-                : `${A}.**.${B}` | `${A}.${DoubleWildcardPath<B, T[A]>}`
-              : `${A}.**.${B}` | `${A}.${DoubleWildcardPath<B, T[A]>}`
-            : `${A}.**.${B}` | `${A}.${DoubleWildcardPath<B, T[A]>}`
-          : never
-        : ExistsAtAnyDepth<T, A> extends true
-          ? `**.${B}`
-          : never
-      : never);
+/**
+ * Filter an object to only include a specific path
+ * @template T - The object type
+ * @template P - The path string, array of paths, or array of paths with options
+ * @template Sep - The separator character (default ".")
+ * @template Wild - The wildcard character (default "*")
+ * @template Shallow - Whether to shallowly filter the object (default false)
+ */
+export type InferObject<
+  T,
+  P,
+  Sep extends string = DefaultOptions["separator"],
+  Wild extends string = DefaultOptions["wildcard"],
+  Shallow extends boolean = DefaultOptions["shallow"],
+> = P extends readonly (infer Item)[]
+  ? UnionToIntersection<
+      Item extends readonly [infer Path, infer ItemOptions]
+        ? Path extends Wild
+          ? T // Handle wildcard in path options
+          : Path extends string
+            ? ItemOptions extends { separator: infer CustomSep }
+              ? CustomSep extends string
+                ? ItemOptions extends { shallow: infer ItemShallow }
+                  ? ItemShallow extends true
+                    ? ShallowFilterByPath<T, Path, CustomSep>
+                    : DeepFilterByPath<T, Path, CustomSep>
+                  : Shallow extends true
+                    ? ShallowFilterByPath<T, Path, CustomSep>
+                    : DeepFilterByPath<T, Path, CustomSep>
+                : never
+              : ItemOptions extends { shallow: infer ItemShallow }
+                ? ItemShallow extends true
+                  ? ShallowFilterByPath<T, Path, Sep>
+                  : DeepFilterByPath<T, Path, Sep>
+                : Shallow extends true
+                  ? ShallowFilterByPath<T, Path, Sep>
+                  : DeepFilterByPath<T, Path, Sep>
+            : never
+        : Item extends Wild
+          ? T // Handle wildcard in array
+          : Item extends string
+            ? Shallow extends true
+              ? ShallowFilterByPath<T, Item, Sep>
+              : DeepFilterByPath<T, Item, Sep>
+            : never
+    >
+  : P extends Wild
+    ? T
+    : P extends string
+      ? Shallow extends true
+        ? ShallowFilterByPath<T, P, Sep>
+        : DeepFilterByPath<T, P, Sep>
+      : never;
 
-type WildcardPath<P extends string, T> =
-  | SingleWildcardPath<P, T>
-  | DoubleWildcardPath<P, T>;
+/**
+ * Helper type for deep filtering
+ */
+type DeepFilterByPath<
+  T,
+  P extends string,
+  Sep extends string = DefaultOptions["separator"],
+> = P extends `${infer K}${Sep}${infer Rest}`
+  ? {
+      [Key in Extract<keyof T, string | number> as `${Key}` extends K
+        ? Key
+        : never]: DeepFilterByPath<T[Key], Rest, Sep>;
+    }
+  : {
+      [Key in Extract<keyof T, string | number> as `${Key}` extends P
+        ? Key
+        : never]: T[Key];
+    };
 
-type BracketNotation<T> = {
-  [K1 in KeysOf<T>]: {
-    [K2 in Exclude<KeysOf<T>, K1>]:
-      | `[${K1}|${K2}]`
-      | {
-          [K3 in Exclude<KeysOf<T>, K1 | K2>]:
-            | `[${K1}|${K2}|${K3}]`
-            | {
-                [K4 in Exclude<
-                  KeysOf<T>,
-                  K1 | K2 | K3
-                >]: `[${K1}|${K2}|${K3}|${K4}]`;
-              }[Exclude<KeysOf<T>, K1 | K2 | K3>];
-        }[Exclude<KeysOf<T>, K1 | K2>];
-  }[Exclude<KeysOf<T>, K1>];
-}[KeysOf<T>];
+/**
+ * Helper type for shallow filtering
+ */
+type ShallowFilterByPath<
+  T,
+  P extends string,
+  Sep extends string = DefaultOptions["separator"],
+> = P extends `${infer K}${Sep}${infer Rest}`
+  ? {
+      [Key in Extract<keyof T, string | number> as `${Key}` extends K
+        ? Key
+        : never]: ShallowFilterByPath<T[Key], Rest, Sep>;
+    }
+  : {
+      [Key in Extract<keyof T, string | number> as `${Key}` extends P
+        ? Key
+        : never]: T[Key] extends object
+        ? T[Key] extends any[]
+          ? T[Key]
+          : {}
+        : T[Key];
+    };
 
-type GetCommonKeys<T, K1 extends KeysOf<T>, K2 extends KeysOf<T>> = Extract<
-  keyof T[K1],
-  keyof T[K2]
-> &
-  (string | number);
-
-type NestedBracketNotation<T> = {
-  [K1 in KeysOf<T>]: {
-    [K2 in Exclude<KeysOf<T>, K1>]: {
-      [CK in GetCommonKeys<T, K1, K2>]: `[${K1}|${K2}].${CK}`;
-    }[GetCommonKeys<T, K1, K2>];
-  }[Exclude<KeysOf<T>, K1>];
-}[KeysOf<T>];
-
-export type PathPatterns<T> =
-  | ObjectPaths<T>
-  | WildcardPath<ObjectPaths<T> & string, T>
-  | BracketNotation<T>
-  | NestedBracketNotation<T>;
+/**
+ * Helper type to convert a union type to an intersection type
+ */
+type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (
+  k: infer I
+) => void
+  ? I
+  : never;
