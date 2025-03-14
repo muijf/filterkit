@@ -1,6 +1,6 @@
 {
   "name": "@filterkit/object",
-  "version": "0.0.0",
+  "version": "0.0.0-dev-20250314164916",
   "description": "A package for filtering objects",
   "keywords": [
     "filter",
