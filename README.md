@@ -6,4 +6,4 @@
 
 # Packages
 
-- [Object](./packages/object/README.md)
+- [Object](./packages/object)
