@@ -253,7 +253,9 @@ export function filter<
       }
 
       // Split the path at the range expression
-      const [beforeRange, afterRange] = matches.split(fullMatch);
+      const parts = matches.split(fullMatch);
+      const beforeRange = parts[0];
+      const afterRange = parts.slice(1).join(fullMatch);
 
       // Create a path for each number in the range
       const expandedPaths = range.map(
@@ -271,46 +273,31 @@ export function filter<
     }
   }
 
-  // Handle single path without range
-  return filterSinglePath(obj, matches, separator, wildcard) as Infer<T, M, O>;
+  // At this point, we know matches is a string
+  // Add a type assertion to help TypeScript understand
+  return filterSinglePath(obj, matches as string, separator, wildcard) as Infer<
+    T,
+    M,
+    O
+  >;
 }
 
+// Test with a simpler object and use type assertions
 const obj = {
   a: {
     b: {
-      1: {
-        c: 1,
-      },
-      2: {
-        c: 2,
-      },
-      3: {
-        c: 3,
-      },
-      4: {
-        c: 4,
-      },
-      5: {
-        c: 5,
-      },
-      6: {
-        c: 6,
-      },
-      7: {
-        c: 7,
-      },
+      1: { c: 1 },
+      2: { c: 2, d: 2 },
+      3: { c: 3, g: 3 },
     },
   },
 };
 
 const t1 = filter(obj, "*");
 const t2 = filter(obj, "a.b.1");
-const t3 = filter(obj, "a.b.1..2");
-
-type T1 = Infer<typeof obj, "*">;
-type T2 = Infer<typeof obj, "a.b.1.c">;
-type T3 = Infer<typeof obj, "a.b.2..3">;
+const t3 = filter(obj, "a.b.3.g");
+const t4 = filter(obj, "a.b.1..3.c");
 
 console.dir(t1, { depth: null });
 console.dir(t2, { depth: null });
-console.dir(t3, { depth: null });
+console.dir(t4, { depth: null });
