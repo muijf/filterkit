@@ -68,59 +68,9 @@ describe("filter function", () => {
       expect(result).toEqual(testObj);
     });
 
-    test("returns the entire object when wildcard is in array", () => {
+    test("returns merged results for multiple paths", () => {
       const result = filter(testObj, ["user.profile.name", "*"]);
       expect(result).toEqual(testObj);
-    });
-
-    test("returns the entire object when wildcard is in path options", () => {
-      const result = filter(testObj, [
-        "user.profile.name",
-        ["*", { shallow: true }],
-      ]);
-      expect(result).toEqual(testObj);
-    });
-  });
-
-  describe("shallow filtering", () => {
-    test("shallow filters a single path", () => {
-      const result = filter(testObj, "user.profile", { shallow: true });
-      // Should have empty objects for nested properties
-      expect(result).toEqual({
-        user: {
-          profile: {},
-        },
-      });
-    });
-
-    test("shallow filters with path options", () => {
-      const result = filter(testObj, [
-        "user.profile", // Uses global shallow: false
-        ["user.settings", { shallow: true }], // Uses local shallow: true
-      ]);
-
-      // profile should have all properties, settings should be empty
-      expect(result).toEqual({
-        user: {
-          profile: {
-            name: "John Doe",
-            age: 30,
-            contact: {
-              email: "john@example.com",
-              phone: "123-456-7890",
-            },
-          },
-          settings: {},
-        },
-      });
-    });
-
-    test("preserves arrays with shallow filtering", () => {
-      const result = filter(testObj, "posts", { shallow: true });
-      // Should preserve the array structure
-      expect(result).toEqual({
-        posts: testObj.posts,
-      });
     });
   });
 
@@ -139,26 +89,18 @@ describe("filter function", () => {
       });
     });
 
-    test("filters with mixed path types", () => {
+    test("merges multiple paths correctly", () => {
       const result = filter(testObj, [
         "user.profile.name",
-        ["meta.version", { shallow: true }],
-        ["comments.1", { shallow: false }],
+        "user.profile.contact.email",
       ]);
-
       expect(result).toEqual({
         user: {
           profile: {
             name: "John Doe",
-          },
-        },
-        meta: {
-          version: "1.0.0",
-        },
-        comments: {
-          1: {
-            text: "Great post!",
-            author: "Jane",
+            contact: {
+              email: "john@example.com",
+            },
           },
         },
       });
@@ -182,13 +124,11 @@ describe("filter function", () => {
       expect(result).toEqual(testObj);
     });
 
-    test("uses custom options in path options", () => {
+    test("uses global separator option", () => {
       const result = filter(
         testObj,
-        ["user.profile.name", ["user/settings/theme", { separator: "/" }]],
-        {
-          separator: ".",
-        }
+        ["user/profile/name", "user/settings/theme"],
+        { separator: "/" }
       );
 
       expect(result).toEqual({
@@ -207,7 +147,7 @@ describe("filter function", () => {
   describe("edge cases", () => {
     test("throws error for non-existent paths", () => {
       expect(() => {
-        filter(testObj, "user.nonexistent.path" as any);
+        filter(testObj, "user.nonexistent.path");
       }).toThrow(
         'Path "user.nonexistent.path" does not exist in the object. Key "nonexistent" not found.'
       );

@@ -1,134 +1,170 @@
-import type {
-  InferObject,
-  Options,
-  DefaultOptions,
-  PathParam,
-  PathWithOptions,
-} from "./types";
+import type { Infer, Matches, Options } from "./types";
+
+/** Represents a plain object with any valid property key type */
+type PlainObject = Record<PropertyKey, unknown>;
 
 /**
- * Filter an object to only include specific paths
- * @param obj - The object to filter
- * @param path - The path or paths to keep
- * @param options - Options for filtering
+ * Type guard to check if a value is a plain object
+ * @param value - The value to check
+ * @returns True if the value is a plain object, false otherwise
  */
-export function filter<
-  T extends object,
-  Sep extends string = DefaultOptions["separator"],
-  Wild extends string = DefaultOptions["wildcard"],
-  Shallow extends boolean = DefaultOptions["shallow"],
-  P extends PathParam<T, Sep, Wild, Shallow> = PathParam<T, Sep, Wild, Shallow>,
->(
-  obj: T,
-  path: P,
-  options?: Options<Sep, Wild, Shallow>
-): InferObject<T, P, Sep, Wild, Shallow> {
-  const defaultSeparator = (options?.separator ?? ".") as Sep;
-  const defaultWildcard = (options?.wildcard ?? "*") as Wild;
-  const defaultShallow = (options?.shallow ?? false) as Shallow;
-
-  // Handle array of paths
-  if (Array.isArray(path)) {
-    // Filter for each path and merge the results
-    return path.reduce((result, currentPath) => {
-      // Check if the path has options (is a tuple with exactly 2 elements)
-      if (
-        Array.isArray(currentPath) &&
-        currentPath.length === 2 &&
-        typeof currentPath[0] === "string" &&
-        typeof currentPath[1] === "object" &&
-        currentPath[1] !== null
-      ) {
-        // Safe to cast now that we've verified the structure
-        const pathWithOptions = currentPath as unknown as PathWithOptions<
-          T,
-          Sep,
-          Wild,
-          Shallow
-        >;
-        const [pathString, pathOptions] = pathWithOptions;
-
-        const separator = (pathOptions?.separator ?? defaultSeparator) as Sep;
-        const wildcard = (pathOptions?.wildcard ?? defaultWildcard) as Wild;
-        const shallow = (pathOptions?.shallow ?? defaultShallow) as Shallow;
-
-        const filtered = filterSinglePath(
-          obj,
-          pathString as string,
-          separator,
-          wildcard,
-          shallow
-        );
-        return deepMerge(result, filtered);
-      } else {
-        // Regular path without options
-        const filtered = filterSinglePath(
-          obj,
-          currentPath as string,
-          defaultSeparator,
-          defaultWildcard,
-          defaultShallow
-        );
-        return deepMerge(result, filtered);
-      }
-    }, {} as any) as InferObject<T, P, Sep, Wild, Shallow>;
-  }
-
-  // Handle single path
-  return filterSinglePath(
-    obj,
-    path as string,
-    defaultSeparator,
-    defaultWildcard,
-    defaultShallow
-  ) as InferObject<T, P, Sep, Wild, Shallow>;
+function isPlainObject(value: unknown): value is PlainObject {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 /**
- * Filter an object to include a single path
+ * Deep clone a value
+ * @template T - The type of value to clone
+ * @param value - The value to clone
+ * @returns A deep clone of the input value
  */
-function filterSinglePath<T extends object>(
-  obj: T,
-  path: string,
-  separator: string,
-  wildcard: string,
-  shallow: boolean
-): any {
-  // Handle wildcard
-  if (path === wildcard) {
-    return { ...obj };
+function deepClone<T>(value: T): T {
+  if (value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map(deepClone) as T;
+  if (!isPlainObject(value)) return value;
+
+  return Object.entries(value).reduce((acc, [key, val]) => {
+    acc[key] = deepClone(val);
+    return acc;
+  }, {} as PlainObject) as T;
+}
+
+/**
+ * Deep merge two objects
+ * @template T - The type of the target object
+ * @template S - The type of the source object
+ * @param target - The target object
+ * @param source - The source object
+ * @returns The merged object
+ */
+function deepMerge<T extends PlainObject, S extends PlainObject>(
+  target: T,
+  source: S
+): T & S {
+  const output = { ...target } as PlainObject;
+
+  if (isPlainObject(target) && isPlainObject(source)) {
+    for (const key of Object.keys(source)) {
+      const sourceValue = source[key];
+      const targetValue = target[key];
+
+      if (
+        isPlainObject(sourceValue) &&
+        key in target &&
+        isPlainObject(targetValue)
+      ) {
+        output[key] = deepMerge(
+          targetValue as PlainObject,
+          sourceValue as PlainObject
+        );
+      } else {
+        output[key] = deepClone(sourceValue);
+      }
+    }
   }
 
-  const keys = path.split(separator) as string[];
-  let result: Record<string, any> = {};
+  return output as T & S;
+}
+
+/**
+ * Extract range information from a path string
+ */
+function extractRange(path: string): {
+  path: string;
+  range: number[] | null;
+} {
+  const regex = /(\d+)\.\.(\d+)/;
+  const match = path.match(regex);
+
+  if (!match) {
+    return { path, range: null };
+  }
+
+  const [fullMatch, start, end] = match;
+  const startNum = parseInt(start, 10);
+  const endNum = parseInt(end, 10);
+
+  // Generate the range of numbers
+  const range = Array.from(
+    { length: endNum - startNum + 1 },
+    (_, i) => startNum + i
+  );
+
+  // Split the path at the range expression
+  const [beforeRange, afterRange] = path.split(fullMatch);
+
+  return {
+    path: `${beforeRange}${fullMatch}${afterRange}`,
+    range,
+  };
+}
+
+/**
+ * Expand a path with a range into multiple paths
+ */
+function expandRangePath(path: string): string[] {
+  const { path: originalPath, range } = extractRange(path);
+
+  if (!range) {
+    return [path];
+  }
+
+  const regex = /(\d+)\.\.(\d+)/;
+  const [beforeRange, afterRange] = originalPath.split(regex);
+
+  return range.map((num) => `${beforeRange}${num}${afterRange}`);
+}
+
+/**
+ * Filter an object by a single path (without range handling)
+ * @param obj - The object to filter
+ * @param path - The path to filter by
+ * @param separator - The separator used in the path
+ * @param wildcard - The wildcard character
+ * @returns The filtered object
+ * @throws Error if the path does not exist in the object
+ */
+function filterSinglePath(
+  obj: unknown,
+  path: string,
+  separator: string,
+  wildcard: string
+): PlainObject {
+  if (path === wildcard) {
+    return isPlainObject(obj) ? { ...obj } : {};
+  }
+
+  if (!isPlainObject(obj)) {
+    throw new Error(`Cannot filter non-object value`);
+  }
+
+  const parts = path.split(separator).filter(Boolean);
+  const result: PlainObject = {};
   let current = result;
-  let source = obj as any;
+  let source = obj as PlainObject;
 
-  for (let i = 0; i < keys.length; i++) {
-    const key = keys[i];
+  for (let i = 0; i < parts.length; i++) {
+    const key = parts[i];
+    const isLastKey = i === parts.length - 1;
 
-    // Check if the key exists in the source object
-    if (source == null || !(key in source)) {
+    if (!(key in source)) {
       throw new Error(
         `Path "${path}" does not exist in the object. Key "${key}" not found.`
       );
     }
 
-    if (i === keys.length - 1) {
-      // Last key, set the actual value
-      if (shallow) {
-        const value = source[key];
-
-        if (value !== null && typeof value === "object") {
-          if (Array.isArray(value)) current[key] = [...value];
-          else current[key] = Object.create(Object.getPrototypeOf(value));
-        } else current[key] = value;
-      } else current[key] = cloneValue(source[key]);
+    if (isLastKey) {
+      current[key] = deepClone(source[key]);
     } else {
-      // Not the last key, create nested object
+      const next = source[key];
+      if (!isPlainObject(next)) {
+        throw new Error(
+          `Cannot traverse through non-object value at key "${key}"`
+        );
+      }
       current[key] = {};
-      current = current[key];
-      source = source[key];
+      current = current[key] as PlainObject;
+      source = next;
     }
   }
 
@@ -136,55 +172,145 @@ function filterSinglePath<T extends object>(
 }
 
 /**
- * Deep merge two objects
+ * Safely filter an object by a path, returning null if the path doesn't exist
+ * @param obj - The object to filter
+ * @param path - The path to filter by
+ * @param separator - The separator used in the path
+ * @param wildcard - The wildcard character
+ * @returns The filtered object or null if the path doesn't exist
  */
-function deepMerge<
-  T extends Record<string, any>,
-  U extends Record<string, any>,
->(target: T, source: U): T & U {
-  const output = { ...target } as Record<string, any>;
+function safeFilterSinglePath(
+  obj: unknown,
+  path: string,
+  separator: string,
+  wildcard: string
+): PlainObject | null {
+  try {
+    return filterSinglePath(obj, path, separator, wildcard);
+  } catch (error) {
+    return null;
+  }
+}
 
-  if (isObject(target) && isObject(source)) {
-    Object.keys(source).forEach((key) => {
-      const sourceValue = source[key];
-      const targetValue = target[key];
+/**
+ * Filter an object to include specific paths
+ * @template T - The type of the object to filter
+ * @template M - The type of the matches
+ * @template O - The type of the options
+ * @param obj - The object to filter
+ * @param matches - The paths to include
+ * @param options - The options for filtering
+ * @returns The filtered object
+ */
+export function filter<
+  T extends object,
+  M extends Matches<T, O>,
+  O extends Options = Options,
+>(obj: T, matches: M, options?: O): Infer<T, M, O> {
+  const separator = options?.separator ?? ".";
+  const wildcard = options?.wildcard ?? "*";
 
-      if (isObject(sourceValue)) {
-        if (!(key in target)) {
-          output[key] = sourceValue;
-        } else {
-          output[key] = deepMerge(
-            targetValue as Record<string, any>,
-            sourceValue as Record<string, any>
-          );
-        }
-      } else {
-        output[key] = sourceValue;
-      }
-    });
+  // Handle wildcard directly
+  if (matches === wildcard) {
+    return filterSinglePath(obj, wildcard, separator, wildcard) as Infer<
+      T,
+      M,
+      O
+    >;
   }
 
-  return output as T & U;
+  // Handle array of paths
+  if (Array.isArray(matches)) {
+    return matches.reduce(
+      (acc, path) =>
+        deepMerge(acc, filter(obj, path as any, options) as PlainObject),
+      {} as PlainObject
+    ) as Infer<T, M, O>;
+  }
+
+  // Handle path with range
+  if (typeof matches === "string" && matches.includes("..")) {
+    // Find the range expression in the path
+    const regex = /(\d+)\.\.(\d+)/;
+    const match = matches.match(regex);
+
+    if (match) {
+      const [fullMatch, start, end] = match;
+      const startNum = parseInt(start, 10);
+      const endNum = parseInt(end, 10);
+
+      // Ensure start is less than end
+      if (startNum >= endNum) {
+        throw new Error(
+          `Invalid range: ${startNum}..${endNum}. Start must be less than end.`
+        );
+      }
+
+      // Create an array of numbers in the range
+      const range = [];
+      for (let i = startNum; i <= endNum; i++) {
+        range.push(i);
+      }
+
+      // Split the path at the range expression
+      const [beforeRange, afterRange] = matches.split(fullMatch);
+
+      // Create a path for each number in the range
+      const expandedPaths = range.map(
+        (num) => `${beforeRange}${num}${afterRange}`
+      );
+
+      // Filter each path and merge the results
+      return expandedPaths.reduce((acc, path) => {
+        const filtered = safeFilterSinglePath(obj, path, separator, wildcard);
+        if (filtered !== null) {
+          return deepMerge(acc, filtered);
+        }
+        return acc;
+      }, {} as PlainObject) as Infer<T, M, O>;
+    }
+  }
+
+  // Handle single path without range
+  return filterSinglePath(obj, matches, separator, wildcard) as Infer<T, M, O>;
 }
 
-/**
- * Check if a value is an object
- */
-function isObject(item: any): item is object {
-  return item !== null && typeof item === "object" && !Array.isArray(item);
-}
+const obj = {
+  a: {
+    b: {
+      1: {
+        c: 1,
+      },
+      2: {
+        c: 2,
+      },
+      3: {
+        c: 3,
+      },
+      4: {
+        c: 4,
+      },
+      5: {
+        c: 5,
+      },
+      6: {
+        c: 6,
+      },
+      7: {
+        c: 7,
+      },
+    },
+  },
+};
 
-/**
- * Clone a value deeply
- */
-function cloneValue(value: any): any {
-  if (value === null || typeof value !== "object") return value;
-  if (Array.isArray(value)) return value.map(cloneValue);
+const t1 = filter(obj, "*");
+const t2 = filter(obj, "a.b.1");
+const t3 = filter(obj, "a.b.1..2");
 
-  const result: Record<string, any> = {};
-  for (const key in value)
-    if (Object.prototype.hasOwnProperty.call(value, key))
-      result[key] = cloneValue(value[key]);
+type T1 = Infer<typeof obj, "*">;
+type T2 = Infer<typeof obj, "a.b.1.c">;
+type T3 = Infer<typeof obj, "a.b.2..3">;
 
-  return result;
-}
+console.dir(t1, { depth: null });
+console.dir(t2, { depth: null });
+console.dir(t3, { depth: null });
