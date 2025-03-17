@@ -40,6 +40,10 @@ importers:
         version: link:../../packages/object
 
   packages/object:
+    dependencies:
+      '@muijf/utils':
+        specifier: ^0.1.0
+        version: 0.1.0
     devDependencies:
       tsup:
         specifier: ^8.4.0
@@ -582,6 +586,10 @@ packages:
       globby: 11.1.0
       read-yaml-file: 1.1.0
     dev: true
+
+  /@muijf/utils@0.1.0:
+    resolution: {integrity: sha512-l5QtsQnQgiCqvMbGfpIPLnIlHS1/6Bfp6HZkPC60s79yZTo7/0PAZM0qQGebMXKkxgfZSXtJs/pGXWKcXU8Fgw==}
+    dev: false
 
   /@nodelib/fs.scandir@2.1.5:
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}

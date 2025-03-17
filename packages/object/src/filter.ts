@@ -1,119 +1,15 @@
-import type { Infer, Matches, Options } from "./types";
-
-/** Represents a plain object with any valid property key type */
-type PlainObject = Record<PropertyKey, unknown>;
-
-/**
- * Type guard to check if a value is a plain object
- * @param value - The value to check
- * @returns True if the value is a plain object, false otherwise
- */
-function isPlainObject(value: unknown): value is PlainObject {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-/**
- * Deep clone a value
- * @template T - The type of value to clone
- * @param value - The value to clone
- * @returns A deep clone of the input value
- */
-function deepClone<T>(value: T): T {
-  if (value === null || typeof value !== "object") return value;
-  if (Array.isArray(value)) return value.map(deepClone) as T;
-  if (!isPlainObject(value)) return value;
-
-  return Object.entries(value).reduce((acc, [key, val]) => {
-    acc[key] = deepClone(val);
-    return acc;
-  }, {} as PlainObject) as T;
-}
-
-/**
- * Deep merge two objects
- * @template T - The type of the target object
- * @template S - The type of the source object
- * @param target - The target object
- * @param source - The source object
- * @returns The merged object
- */
-function deepMerge<T extends PlainObject, S extends PlainObject>(
-  target: T,
-  source: S
-): T & S {
-  const output = { ...target } as PlainObject;
-
-  if (isPlainObject(target) && isPlainObject(source)) {
-    for (const key of Object.keys(source)) {
-      const sourceValue = source[key];
-      const targetValue = target[key];
-
-      if (
-        isPlainObject(sourceValue) &&
-        key in target &&
-        isPlainObject(targetValue)
-      ) {
-        output[key] = deepMerge(
-          targetValue as PlainObject,
-          sourceValue as PlainObject
-        );
-      } else {
-        output[key] = deepClone(sourceValue);
-      }
-    }
-  }
-
-  return output as T & S;
-}
-
-/**
- * Extract range information from a path string
- */
-function extractRange(path: string): {
-  path: string;
-  range: number[] | null;
-} {
-  const regex = /(\d+)\.\.(\d+)/;
-  const match = path.match(regex);
-
-  if (!match) {
-    return { path, range: null };
-  }
-
-  const [fullMatch, start, end] = match;
-  const startNum = parseInt(start, 10);
-  const endNum = parseInt(end, 10);
-
-  // Generate the range of numbers
-  const range = Array.from(
-    { length: endNum - startNum + 1 },
-    (_, i) => startNum + i
-  );
-
-  // Split the path at the range expression
-  const [beforeRange, afterRange] = path.split(fullMatch);
-
-  return {
-    path: `${beforeRange}${fullMatch}${afterRange}`,
-    range,
-  };
-}
-
-/**
- * Expand a path with a range into multiple paths
- */
-function expandRangePath(path: string): string[] {
-  const { path: originalPath, range } = extractRange(path);
-
-  if (!range) {
-    return [path];
-  }
-
-  const regex = /(\d+)\.\.(\d+)/;
-  const [beforeRange, afterRange] = originalPath.split(regex);
-
-  return range.map((num) => `${beforeRange}${num}${afterRange}`);
-}
+import {
+  deepClone,
+  deepMerge,
+  isPlainObject,
+  type PlainObject,
+  type IsObject,
+  type NumericKeysOf,
+  type ValidNumberRange,
+  type LessThan,
+  type MergeIntersection,
+  type UnionToIntersection,
+} from "@muijf/utils";
 
 /**
  * Filter an object by a single path (without range handling)
@@ -193,39 +89,267 @@ function safeFilterSinglePath(
 }
 
 /**
- * Filter an object to include specific paths
- * @template T - The type of the object to filter
- * @template M - The type of the matches
- * @template O - The type of the options
- * @param obj - The object to filter
- * @param matches - The paths to include
- * @param options - The options for filtering
- * @returns The filtered object
+ * Filter namespace containing the function and related types
  */
+export namespace filter {
+  /**
+   * Options for path operations
+   */
+  export type Options = {
+    separator?: string;
+    wildcard?: string;
+  };
+
+  /**
+   * Default options for path operations
+   */
+  export type DefaultOptions = {
+    separator: ".";
+    wildcard: "*";
+  };
+
+  /**
+   * Helper type to merge user options with defaults
+   */
+  type MergeOptions<O extends Options> = {
+    separator: O extends { separator: infer Sep extends string } ? Sep : ".";
+    wildcard: O extends { wildcard: infer W extends string } ? W : "*";
+  };
+
+  /**
+   * Helper type to get all paths in an object
+   */
+  type ObjectPaths<T, O extends Options> = T extends object
+    ? {
+        [K in keyof T]: K extends string | number
+          ?
+              | `${K}`
+              | (IsObject<T[K]> extends true
+                  ? `${K}` | `${K}${O["separator"]}${ObjectPaths<T[K], O>}`
+                  : never)
+          : never;
+      }[keyof T]
+    : never;
+
+  /**
+   * Helper type to get all valid paths in an object with a specific separator
+   */
+  type GetPaths<T, Sep extends string> = T extends object
+    ? {
+        [K in keyof T]: K extends string | number
+          ? T[K] extends object
+            ? T[K] extends { [key: number]: any }
+              ?
+                  | `${K}`
+                  | `${K}${Sep}${NumericKeysOf<T[K]>}`
+                  | `${K}${Sep}${GetPaths<T[K], Sep>}`
+                  | RangePathsFor<T[K], K, Sep>
+                  | RangePathsWithPropertyFor<T[K], K, Sep>
+              : `${K}` | `${K}${Sep}${GetPaths<T[K], Sep>}`
+            : `${K}`
+          : never;
+      }[keyof T]
+    : never;
+
+  /**
+   * Helper type to generate range paths for an object
+   * Strictly ensures that N1 < N2 (first number is less than second)
+   */
+  type RangePathsFor<
+    T extends { [key: number]: any },
+    K extends string | number,
+    Sep extends string,
+  > = {
+    [N1 in NumericKeysOf<T>]: {
+      [N2 in NumericKeysOf<T>]: [N1, N2] extends [
+        infer A extends number,
+        infer B extends number,
+      ]
+        ? LessThan<A, B> extends true
+          ? `${K}${Sep}${N1}..${N2}`
+          : never
+        : never;
+    }[NumericKeysOf<T>];
+  }[NumericKeysOf<T>];
+
+  /**
+   * Helper type to generate range paths with properties for an object
+   * Explicitly ensures that N1 < N2 (first number is less than second)
+   */
+  type RangePathsWithPropertyFor<
+    T extends { [key: number]: any },
+    K extends string | number,
+    Sep extends string,
+  > = {
+    [N1 in NumericKeysOf<T>]: {
+      [N2 in NumericKeysOf<T>]: [N1, N2] extends [
+        infer A extends number,
+        infer B extends number,
+      ]
+        ? LessThan<A, B> extends true
+          ? {
+              [P in keyof T[N1] &
+                keyof T[N2] &
+                string]: `${K}${Sep}${N1}..${N2}${Sep}${P}`;
+            }[keyof T[N1] & keyof T[N2] & string]
+          : never
+        : never;
+    }[NumericKeysOf<T>];
+  }[NumericKeysOf<T>];
+
+  /**
+   * Updated Matches type that relies on runtime validation for ranges
+   */
+  export type Matches<T, O extends Options = DefaultOptions> =
+    | (O extends { separator: infer Sep extends string }
+        ? GetPaths<T, Sep>
+        : GetPaths<T, ".">)
+    | (O extends { wildcard: infer W extends string } ? W : "*")
+    | Array<
+        O extends { separator: infer Sep extends string }
+          ? GetPaths<T, Sep>
+          : GetPaths<T, ".">
+      >;
+
+  /**
+   * Match type to find all possible matches in an object based on settings
+   */
+  export type Match<T, O extends Options = DefaultOptions> = ObjectPaths<T, O>;
+
+  /**
+   * Helper type to build an object structure from a path
+   */
+  type BuildPath<T, P extends string, O extends Options> = P extends
+    | O["wildcard"]
+    | "*"
+    ? T
+    : P extends `${infer Prefix}${O["separator"] extends string ? O["separator"] : "."}${infer Start extends number}..${infer End extends number}${O["separator"] extends string ? O["separator"] : "."}${infer Rest}`
+      ? Prefix extends keyof T
+        ? {
+            [K in Prefix]: BuildRangePathWithRest<
+              T[Prefix],
+              Start,
+              End,
+              Rest,
+              O
+            >;
+          }
+        : never
+      : P extends `${infer Prefix}${O["separator"] extends string ? O["separator"] : "."}${infer Start extends number}..${infer End extends number}`
+        ? Prefix extends keyof T
+          ? { [K in Prefix]: BuildRangePath<T[Prefix], Start, End> }
+          : never
+        : P extends `${infer Key}${O["separator"] extends string ? O["separator"] : "."}${infer Rest}`
+          ? Key extends keyof T
+            ? { [K in Key]: BuildPath<T[Key], Rest, O> }
+            : Key extends `${infer N extends number}`
+              ? N extends keyof T
+                ? { [K in Key]: BuildPath<T[N], Rest, O> }
+                : never
+              : never
+          : P extends keyof T
+            ? { [K in P]: T[P] }
+            : P extends `${infer N extends number}`
+              ? N extends keyof T
+                ? { [K in P]: T[N] }
+                : never
+              : {};
+
+  /**
+   * Helper type to build a range path
+   */
+  type BuildRangePath<T, Start extends number, End extends number> =
+    LessThan<Start, End> extends true
+      ? T extends { [key: number]: any }
+        ? { [K in ValidNumberRange<T, Start, End>]: T[K] }
+        : never
+      : never;
+
+  /**
+   * Helper type to build a range path with remaining path
+   */
+  type BuildRangePathWithRest<
+    T,
+    Start extends number,
+    End extends number,
+    Rest extends string,
+    O extends Options,
+  > =
+    LessThan<Start, End> extends true
+      ? T extends { [key: number]: any }
+        ? {
+            [K in ValidNumberRange<T, Start, End>]: BuildPath<T[K], Rest, O>;
+          }
+        : never
+      : never;
+
+  /**
+   * Infer the resulting type from an object and matcher
+   */
+  export type Return<
+    T,
+    M extends
+      | string
+      | string[]
+      | (O extends { wildcard: infer W extends string } ? W : "*"),
+    O extends Options = DefaultOptions,
+  > = M extends string[]
+    ? InferArray<T, M, MergeOptions<O>>
+    : M extends O["wildcard"] | "*"
+      ? T
+      : M extends string
+        ? BuildPath<T, M, MergeOptions<O>>
+        : never;
+
+  /**
+   * Helper type for handling array of paths
+   */
+  type InferArray<
+    T,
+    Paths extends string[],
+    O extends Options,
+  > = MergeIntersection<UnionToIntersection<BuildPath<T, Paths[number], O>>>;
+}
+
+/**
+ * Filter an object to include specific paths
+ */
+export function filter<T extends object, M extends filter.Matches<T>>(
+  obj: T,
+  matches: M
+): filter.Return<T, M>;
+
 export function filter<
   T extends object,
-  M extends Matches<T, O>,
-  O extends Options = Options,
->(obj: T, matches: M, options?: O): Infer<T, M, O> {
+  M extends filter.Matches<T, O>,
+  O extends filter.Options = filter.DefaultOptions,
+>(obj: T, matches: M, options: O): filter.Return<T, M, O>;
+
+export function filter(
+  obj: object,
+  matches: string | string[] | "*",
+  options?: filter.Options
+): any {
   const separator = options?.separator ?? ".";
   const wildcard = options?.wildcard ?? "*";
 
   // Handle wildcard directly
   if (matches === wildcard) {
-    return filterSinglePath(obj, wildcard, separator, wildcard) as Infer<
-      T,
-      M,
-      O
-    >;
+    return deepClone(obj);
   }
 
   // Handle array of paths
   if (Array.isArray(matches)) {
-    return matches.reduce(
-      (acc, path) =>
-        deepMerge(acc, filter(obj, path as any, options) as PlainObject),
-      {} as PlainObject
-    ) as Infer<T, M, O>;
+    return matches.reduce((acc, path) => {
+      // Use type assertion to tell TypeScript that each path is valid
+      if (options) {
+        const filtered = filter(obj, path as any, options);
+        return deepMerge(acc, filtered as PlainObject);
+      } else {
+        const filtered = filter(obj, path as any);
+        return deepMerge(acc, filtered as PlainObject);
+      }
+    }, {} as PlainObject);
   }
 
   // Handle path with range
@@ -269,35 +393,14 @@ export function filter<
           return deepMerge(acc, filtered);
         }
         return acc;
-      }, {} as PlainObject) as Infer<T, M, O>;
+      }, {} as PlainObject);
     }
   }
 
-  // At this point, we know matches is a string
-  // Add a type assertion to help TypeScript understand
-  return filterSinglePath(obj, matches as string, separator, wildcard) as Infer<
-    T,
-    M,
-    O
-  >;
+  // Handle simple path
+  if (typeof matches === "string") {
+    return filterSinglePath(obj, matches, separator, wildcard);
+  }
+
+  return {};
 }
-
-// Test with a simpler object and use type assertions
-const obj = {
-  a: {
-    b: {
-      1: { c: 1 },
-      2: { c: 2, d: 2 },
-      3: { c: 3, g: 3 },
-    },
-  },
-};
-
-const t1 = filter(obj, "*");
-const t2 = filter(obj, "a.b.1");
-const t3 = filter(obj, "a.b.3.g");
-const t4 = filter(obj, "a.b.1..3.c");
-
-console.dir(t1, { depth: null });
-console.dir(t2, { depth: null });
-console.dir(t4, { depth: null });

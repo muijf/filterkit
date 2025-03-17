@@ -1,6 +1,6 @@
 {
   "name": "@filterkit/object",
-  "version": "0.0.0-dev-20250316231244",
+  "version": "0.0.1",
   "description": "A package for filtering objects",
   "keywords": [
     "filter",
@@ -44,5 +44,8 @@
   "packageManager": "pnpm@8.6.7",
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@muijf/utils": "^0.1.0"
   }
 }

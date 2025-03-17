@@ -76,4 +76,4 @@ const obj = {
 
 const filtered = filter(obj, "amber.dark");
 
-console.log(filtered);
+console.dir(filtered, { depth: null });
